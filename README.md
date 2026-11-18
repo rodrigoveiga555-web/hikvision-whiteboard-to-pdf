@@ -1,10 +1,22 @@
 # Whiteboard to PDF / Quadro para PDF
 
-A single-page web tool that converts digital whiteboard hikvision files (`.vwb`, `.zip` or `.json`) into crisp A4 PDFs, page by page.
+A single-page web tool made to convert **Hikvision digital whiteboard** files (`.vwb`, `.zip` or `.json`) into crisp A4 PDFs, page by page.
+
+These files don't contain a picture of the board. They store the **mathematical coordinates of every point the pen passed through** on the whiteboard (plus colour, pen width and pen type). This tool reads those coordinates and redraws each stroke as smooth curves at high resolution, so the PDF stays sharp at any zoom level.
+
 Everything runs in your browser — the file never leaves your computer.
 
-Uma ferramenta web de página única que converte ficheiros do quadro digital hikvision (`.vwb`, `.zip` ou `.json`) em PDF A4 nítido, página a página.
+> This is an independent project and is not affiliated with or endorsed by Hikvision.
+
+---
+
+Uma ferramenta web de página única, feita para converter ficheiros do **quadro digital Hikvision** (`.vwb`, `.zip` ou `.json`) em PDF A4 nítido, página a página.
+
+Estes ficheiros não guardam uma imagem do quadro. Guardam as **coordenadas matemáticas de todos os pontos por onde a caneta passou** no quadro (além da cor, da espessura e do tipo de caneta). Esta ferramenta lê essas coordenadas e volta a desenhar cada traço em curvas suaves e em alta resolução, por isso o PDF fica nítido mesmo com muito zoom.
+
 Tudo é processado no browser — o ficheiro não sai do teu computador.
+
+> Este é um projeto independente, sem qualquer ligação à Hikvision.
 
 ## Features / Funcionalidades
 
