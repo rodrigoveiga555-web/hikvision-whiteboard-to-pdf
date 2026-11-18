@@ -1,0 +1,946 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Quadro para PDF</title>
+    <!-- Biblioteca jsPDF -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <!-- Biblioteca JSZip (para abrir o .vwb diretamente) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <style>
+        :root {
+            --bg: #0f1419;
+            --bg-glow: #17313a;
+            --card: #182028;
+            --card-2: #1f2933;
+            --text: #e8eef2;
+            --muted: #8fa1ad;
+            --line: #2b3844;
+            --accent: #4fd1c5;
+            --accent-2: #38b2ac;
+            --accent-ink: #062b2a;
+            --danger: #f56565;
+            --shadow: 0 20px 50px rgba(0,0,0,.45);
+        }
+        @media (prefers-color-scheme: light) {
+            :root {
+                --bg: #f3f6f8; --bg-glow: #d9f1ee; --card: #ffffff; --card-2: #f0f4f7;
+                --text: #17232c; --muted: #5d7080; --line: #dbe3e9;
+                --accent: #0f9d92; --accent-2: #0b847a; --accent-ink: #ffffff;
+                --shadow: 0 20px 50px rgba(20,40,60,.12);
+            }
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, Roboto, sans-serif;
+            color: var(--text);
+            background: radial-gradient(1200px 500px at 50% -150px, var(--bg-glow), transparent 70%), var(--bg);
+            padding: 48px 20px 80px;
+        }
+        .wrap { max-width: 760px; margin: 0 auto; position: relative; }
+
+        /* Seletor de idioma */
+        .lang {
+            position: absolute; top: -28px; right: 0;
+            display: inline-flex; padding: 3px; gap: 2px;
+            background: var(--card); border: 1px solid var(--line); border-radius: 99px;
+        }
+        .lang button {
+            border: none; background: transparent; color: var(--muted);
+            font: inherit; font-size: 12px; font-weight: 700; letter-spacing: .04em;
+            padding: 5px 12px; border-radius: 99px; cursor: pointer; transition: all .15s;
+        }
+        .lang button:hover { color: var(--text); }
+        .lang button.on { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: var(--accent-ink); }
+
+        header { text-align: center; margin-bottom: 32px; padding-top: 12px; }
+        .logo {
+            width: 56px; height: 56px; margin: 0 auto 16px;
+            border-radius: 16px;
+            display: grid; place-items: center;
+            background: linear-gradient(135deg, var(--accent), var(--accent-2));
+            box-shadow: 0 10px 30px rgba(79,209,197,.28);
+        }
+        .logo svg { width: 28px; height: 28px; stroke: var(--accent-ink); }
+        h1 { margin: 0; font-size: 30px; letter-spacing: -.02em; font-weight: 700; }
+        header p { margin: 8px 0 0; color: var(--muted); font-size: 15px; }
+
+        .card {
+            background: var(--card);
+            border: 1px solid var(--line);
+            border-radius: 20px;
+            padding: 24px;
+            box-shadow: var(--shadow);
+        }
+
+        /* Zona de largar ficheiro */
+        .drop {
+            display: block;
+            border: 2px dashed var(--line);
+            background: var(--card-2);
+            border-radius: 16px;
+            padding: 36px 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: border-color .2s, background .2s, transform .2s;
+        }
+        .drop:hover, .drop.drag { border-color: var(--accent); transform: translateY(-1px); }
+        .drop.drag { background: color-mix(in srgb, var(--accent) 10%, var(--card-2)); }
+        .drop svg { width: 36px; height: 36px; stroke: var(--accent); margin-bottom: 10px; }
+        .drop strong { display: block; font-size: 16px; }
+        .drop span { color: var(--muted); font-size: 13px; }
+        .drop input { display: none; }
+
+        .chip {
+            display: none;
+            align-items: center; gap: 12px;
+            margin-top: 16px;
+            padding: 12px 14px;
+            background: var(--card-2);
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            font-size: 14px;
+        }
+        .chip.on { display: flex; }
+        .chip .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); flex: none; }
+        .chip .name { font-weight: 600; word-break: break-all; }
+        .chip .meta { color: var(--muted); margin-left: auto; white-space: nowrap; font-size: 13px; }
+
+        .stats { display: none; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 16px; }
+        .stats.on { display: grid; }
+        .stat { background: var(--card-2); border: 1px solid var(--line); border-radius: 12px; padding: 12px; text-align: center; }
+        .stat b { display: block; font-size: 20px; }
+        .stat small { color: var(--muted); font-size: 12px; }
+
+        .options { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 20px; }
+        @media (max-width: 560px) { .options { grid-template-columns: 1fr; } .stats { grid-template-columns: 1fr 1fr 1fr; } }
+        .field label { display: block; margin-bottom: 6px; font-size: 13px; font-weight: 600; color: var(--muted); }
+        input[type="text"], select {
+            width: 100%;
+            padding: 12px 14px;
+            background: var(--card-2);
+            border: 1px solid var(--line);
+            color: var(--text);
+            border-radius: 12px;
+            font-size: 15px;
+            font-family: inherit;
+        }
+        input[type="text"]:focus, select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
+
+        button#btnPdf {
+            display: none;
+            width: 100%;
+            margin-top: 20px;
+            padding: 16px 24px;
+            font-size: 16px; font-weight: 700; font-family: inherit;
+            color: var(--accent-ink);
+            background: linear-gradient(135deg, var(--accent), var(--accent-2));
+            border: none; border-radius: 14px;
+            cursor: pointer;
+            box-shadow: 0 10px 24px rgba(79,209,197,.25);
+            transition: transform .15s, box-shadow .15s, opacity .15s;
+        }
+        button#btnPdf:hover { transform: translateY(-2px); box-shadow: 0 14px 30px rgba(79,209,197,.35); }
+        button#btnPdf:disabled { opacity: .7; cursor: wait; transform: none; }
+
+        .progress { display: none; margin-top: 14px; }
+        .progress.on { display: block; }
+        .bar { height: 8px; background: var(--card-2); border-radius: 99px; overflow: hidden; border: 1px solid var(--line); }
+        .bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--accent), var(--accent-2)); transition: width .2s; }
+        .progress p { margin: 8px 0 0; font-size: 13px; color: var(--muted); text-align: center; }
+
+        #msg { display: none; margin-top: 14px; padding: 12px 14px; border-radius: 12px; font-size: 14px; text-align: center; background: var(--card-2); border: 1px solid var(--line); color: var(--muted); }
+        #msg.on { display: block; }
+
+        /* Pré-visualização */
+
+        .chip .x {
+            margin-left: 4px; flex: none;
+            width: 28px; height: 28px; border-radius: 8px;
+            border: 1px solid var(--line); background: var(--card);
+            color: var(--muted); font-size: 16px; line-height: 1; cursor: pointer;
+            display: grid; place-items: center; transition: all .15s;
+        }
+        .chip .x:hover { color: var(--danger); border-color: var(--danger); }
+
+        .tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+        .tools .hint { flex: 1 1 100%; font-size: 13px; color: var(--muted); margin: 0 0 4px; line-height: 1.5; }
+        .tools button, .tools select {
+            width: auto; padding: 8px 12px; font-size: 13px; font-weight: 600; font-family: inherit;
+            border-radius: 10px; border: 1px solid var(--line); background: var(--card); color: var(--text); cursor: pointer;
+        }
+        .tools button:hover { border-color: var(--accent); }
+        .tools .sp { flex: 1; }
+
+        .stage { position: relative; line-height: 0; user-select: none; -webkit-user-select: none; cursor: crosshair; }
+        .stage canvas { width: 100%; }
+        .layer { position: absolute; inset: 0; pointer-events: none; line-height: normal; }
+        .seg { position: absolute; left: 0; right: 0; pointer-events: none; }
+        .seg.over { background: rgba(245, 158, 11, .12); }
+        .tag {
+            position: absolute; left: 8px; top: 6px;
+            font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 99px;
+            background: rgba(15, 23, 32, .82); color: #e8eef2; white-space: nowrap;
+        }
+        .seg.over .tag { background: #b45309; color: #fff; }
+        .cut {
+            position: absolute; left: 0; right: 0; height: 22px; margin-top: -11px;
+            pointer-events: auto; cursor: ns-resize; touch-action: none;
+        }
+        .cut::before {
+            content: ''; position: absolute; left: 0; right: 0; top: 10px; height: 0;
+            border-top: 2px dashed #ef4444;
+        }
+        .cut:hover::before { border-top-color: #f97316; }
+        .cutx {
+            position: absolute; right: 8px; top: 0; width: 22px; height: 22px; border-radius: 50%;
+            border: none; background: #ef4444; color: #fff; font-size: 13px; line-height: 22px; text-align: center;
+            cursor: pointer; padding: 0; box-shadow: 0 2px 6px rgba(0,0,0,.3);
+        }
+        .cutx:hover { background: #dc2626; }
+        .grip {
+            position: absolute; left: 50%; top: 4px; width: 44px; height: 14px; margin-left: -22px;
+            border-radius: 99px; background: #ef4444; opacity: .92;
+        }
+
+        .canvas-container { margin-top: 24px; }
+        .canvas-container h3 { margin: 0 0 12px; font-size: 14px; font-weight: 600; color: var(--muted); letter-spacing: .04em; text-transform: uppercase; }
+        .scroll {
+            max-height: 70vh;
+            overflow: auto;
+            border-radius: 14px;
+            border: 1px solid var(--line);
+            background: #fff;
+        }
+        canvas { display: block; height: auto; }
+
+        footer { text-align: center; margin-top: 28px; color: var(--muted); font-size: 12px; }
+    </style>
+</head>
+<body>
+<div class="wrap">
+    <div class="lang" role="group" aria-label="Idioma / Language">
+        <button type="button" data-lang="pt">PT</button>
+        <button type="button" data-lang="en">EN</button>
+    </div>
+
+    <header>
+        <div class="logo">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+        </div>
+        <h1 data-i18n="title">Quadro para PDF</h1>
+        <p data-i18n="subtitle">Converte o ficheiro do quadro digital em PDF A4 nítido, página a página.</p>
+    </header>
+
+    <div class="card">
+        <label class="drop" id="drop" for="fileInput">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4"/><path d="m6 10 6-6 6 6"/><path d="M4 20h16"/></svg>
+            <strong data-i18n="dropTitle">Larga aqui o ficheiro .VWB</strong>
+            <span data-i18n="dropSub">ou clica para escolher · também aceita .ZIP e .JSON</span>
+            <input type="file" id="fileInput" accept=".vwb,.zip,.json">
+        </label>
+
+        <div class="chip" id="chip"><span class="dot"></span><span class="name" id="chipName"></span><span class="meta" id="chipMeta"></span><button class="x" id="chipX" type="button" data-i18n-title="removeFile" data-i18n-aria="removeFile">&#10005;</button></div>
+
+        <div class="stats" id="stats">
+            <div class="stat"><b id="stTracos">0</b><small data-i18n="statStrokes">traços</small></div>
+            <div class="stat"><b id="stQuadros">0</b><small data-i18n="statBoards">quadro(s)</small></div>
+            <div class="stat"><b id="stPaginas">0</b><small data-i18n="statPages">páginas A4</small></div>
+        </div>
+
+        <div class="options">
+            <div class="field" id="nameGroup" style="display: none;">
+                <label for="fileName" data-i18n="pdfName">Nome do PDF</label>
+                <input type="text" id="fileName" value="" data-i18n-ph="namePh">
+            </div>
+            <div class="field" id="qualGroup" style="display: none;">
+                <label for="qualidade" data-i18n="quality">Qualidade</label>
+                <select id="qualidade">
+                    <option value="2480" data-i18n="q300">300 DPI · leve</option>
+                    <option value="3720" data-i18n="q450">450 DPI · equilibrada</option>
+                    <option value="4960" data-i18n="q600" selected>600 DPI · máxima</option>
+                </select>
+            </div>
+        </div>
+
+        <button id="btnPdf" onclick="guardarCadernoPDF()" data-i18n="btnPdf">Gerar e transferir PDF</button>
+
+        <div class="progress" id="progress">
+            <div class="bar"><i id="barFill"></i></div>
+            <p id="progressTxt"></p>
+        </div>
+        <div id="msg"></div>
+    </div>
+
+    <div id="pagesContainer"></div>
+
+    <footer data-i18n="footer">Tudo é processado no teu browser — o ficheiro não sai do teu computador.</footer>
+</div>
+
+    <script>
+        // ---------- Idiomas / Languages ----------
+        const I18N = {
+            pt: {
+                pageTitle: 'Quadro para PDF',
+                title: 'Quadro para PDF',
+                subtitle: 'Converte o ficheiro do quadro digital em PDF A4 nítido, página a página.',
+                dropTitle: 'Larga aqui o ficheiro .VWB',
+                dropSub: 'ou clica para escolher · também aceita .ZIP e .JSON',
+                removeFile: 'Remover ficheiro',
+                statStrokes: 'traços',
+                statBoards: 'quadro(s)',
+                statPages: 'páginas A4',
+                pdfName: 'Nome do PDF',
+                namePh: 'O teu nome de ficheiro...',
+                defaultName: 'Apontamentos',
+                quality: 'Qualidade',
+                q300: '300 DPI · leve',
+                q450: '450 DPI · equilibrada',
+                q600: '600 DPI · máxima',
+                btnPdf: 'Gerar e transferir PDF',
+                generating: 'A gerar…',
+                footer: 'Tudo é processado no teu browser — o ficheiro não sai do teu computador.',
+                processing: 'A processar as coordenadas…',
+                readErr: 'Não consegui ler o ficheiro: {detail}',
+                noDrawing: 'Nenhum desenho encontrado neste ficheiro.',
+                errJszip: 'a biblioteca JSZip não carregou (precisas de internet).',
+                errNoJson: 'não encontrei nenhum JSON de quadro dentro do .vwb.',
+                errBadJson: 'o JSON não tem a estrutura de um quadro.',
+                previewTitle: 'Pré-visualização · quadro {n}',
+                hint: '<b>Cortes de página:</b> clica na imagem para adicionar um corte, arrasta a linha vermelha para a mover e clica no ✕ para a remover. Cada zona entre cortes é uma página.',
+                autoCuts: 'Cortes automáticos',
+                clearCuts: 'Limpar cortes',
+                zoomTitle: 'Ampliação',
+                zoomFit: 'Ajustar à largura',
+                page: 'Pág. {n}',
+                tooLong: ' · demasiado longa, vai ser reduzida a {pct}%',
+                dragCut: 'Arrasta para mover',
+                removeCut: 'Remover este corte',
+                preparing: 'A preparar…',
+                pageOf: 'Página {a} de {b}',
+                saving: 'A gravar o ficheiro…',
+                done: 'Concluído · {n} página(s)',
+                pdfError: 'Aconteceu um erro durante a criação do PDF: {detail}'
+            },
+            en: {
+                pageTitle: 'Whiteboard to PDF',
+                title: 'Whiteboard to PDF',
+                subtitle: 'Converts your digital whiteboard file into a crisp A4 PDF, page by page.',
+                dropTitle: 'Drop your .VWB file here',
+                dropSub: 'or click to browse · also accepts .ZIP and .JSON',
+                removeFile: 'Remove file',
+                statStrokes: 'strokes',
+                statBoards: 'board(s)',
+                statPages: 'A4 pages',
+                pdfName: 'PDF name',
+                namePh: 'Your file name...',
+                defaultName: 'Notes',
+                quality: 'Quality',
+                q300: '300 DPI · light',
+                q450: '450 DPI · balanced',
+                q600: '600 DPI · maximum',
+                btnPdf: 'Generate and download PDF',
+                generating: 'Generating…',
+                footer: 'Everything is processed in your browser — the file never leaves your computer.',
+                processing: 'Processing coordinates…',
+                readErr: 'Could not read the file: {detail}',
+                noDrawing: 'No drawing found in this file.',
+                errJszip: 'the JSZip library failed to load (internet required).',
+                errNoJson: 'no whiteboard JSON found inside the .vwb.',
+                errBadJson: 'the JSON does not have a whiteboard structure.',
+                previewTitle: 'Preview · board {n}',
+                hint: '<b>Page breaks:</b> click the image to add a cut, drag the red line to move it and click ✕ to remove it. Each area between cuts becomes one page.',
+                autoCuts: 'Automatic cuts',
+                clearCuts: 'Clear cuts',
+                zoomTitle: 'Zoom',
+                zoomFit: 'Fit to width',
+                page: 'Page {n}',
+                tooLong: ' · too long, will be scaled down to {pct}%',
+                dragCut: 'Drag to move',
+                removeCut: 'Remove this cut',
+                preparing: 'Preparing…',
+                pageOf: 'Page {a} of {b}',
+                saving: 'Saving file…',
+                done: 'Done · {n} page(s)',
+                pdfError: 'An error occurred while creating the PDF: {detail}'
+            }
+        };
+
+        // Inglês é o idioma predefinido (a escolha do utilizador fica guardada)
+        let LANG = 'en';
+        try {
+            const saved = localStorage.getItem('quadro-pdf-lang');
+            if (saved === 'pt' || saved === 'en') LANG = saved;
+        } catch (e) { /* ignorar */ }
+
+        function t(key, params) {
+            let s = (I18N[LANG] && I18N[LANG][key]);
+            if (s === undefined) s = I18N.pt[key] !== undefined ? I18N.pt[key] : key;
+            if (params) for (const k in params) s = s.split('{' + k + '}').join(params[k]);
+            return s;
+        }
+        function numLocale() { return LANG === 'pt' ? 'pt-PT' : 'en-GB'; }
+
+        // Erros com chave de tradução
+        function erroI18n(key) { const e = new Error(t(key)); e.i18nKey = key; return e; }
+        function textoErro(err) { return err && err.i18nKey ? t(err.i18nKey) : (err && err.message) || String(err); }
+
+        // Estado dinâmico (para re-traduzir ao mudar de idioma)
+        let msgFn = null;      // () => string | ''
+        let progFn = null;     // () => string
+        let aGerar = false;
+
+        function aplicarIdioma() {
+            document.documentElement.lang = LANG === 'pt' ? 'pt-PT' : 'en';
+            document.title = t('pageTitle');
+
+            document.querySelectorAll('[data-i18n]').forEach(el => {
+                const params = el.dataset.n ? { n: el.dataset.n } : undefined;
+                const txt = t(el.dataset.i18n, params);
+                if (el.dataset.html) el.innerHTML = txt; else el.textContent = txt;
+            });
+            document.querySelectorAll('[data-i18n-title]').forEach(el => { el.title = t(el.dataset.i18nTitle); });
+            document.querySelectorAll('[data-i18n-aria]').forEach(el => { el.setAttribute('aria-label', t(el.dataset.i18nAria)); });
+            document.querySelectorAll('[data-i18n-ph]').forEach(el => { el.placeholder = t(el.dataset.i18nPh); });
+
+            document.querySelectorAll('.lang button').forEach(b => b.classList.toggle('on', b.dataset.lang === LANG));
+
+            if (aGerar) document.getElementById('btnPdf').textContent = t('generating');
+
+            // Textos dinâmicos
+            if (msgFn) mostrarMsg(msgFn);
+            if (progFn) document.getElementById('progressTxt').textContent = progFn();
+            const st = document.getElementById('stTracos');
+            if (window.boardsData && window.boardsData.length) {
+                let tracos = 0;
+                window.boardsData.forEach(bd => { tracos += bd.childList.length; });
+                st.textContent = tracos.toLocaleString(numLocale());
+                window.boardsData.forEach(bd => { if (bd.layer) renderCortes(bd); });
+            }
+        }
+
+        document.querySelectorAll('.lang button').forEach(b => {
+            b.addEventListener('click', () => {
+                LANG = b.dataset.lang;
+                try { localStorage.setItem('quadro-pdf-lang', LANG); } catch (e) { /* ignorar */ }
+                aplicarIdioma();
+            });
+        });
+
+        // Converte o inteiro ARGB do quadro numa cor CSS.
+        // CORREÇÃO: a caneta "preta" do quadro é guardada como branco (0x9BFFFFFF)
+        // e o quadro mostra-a como preto em fundo claro. Aqui passa a preto.
+        function getCssColor(argbNumber) {
+            let color = parseInt(argbNumber);
+            if (isNaN(color)) return 'black';
+            if (color < 0) color = 0xFFFFFFFF + color + 1;
+            let hex = color.toString(16).padStart(8, '0');
+            let r = parseInt(hex.slice(2, 4), 16);
+            let g = parseInt(hex.slice(4, 6), 16);
+            let b = parseInt(hex.slice(6, 8), 16);
+
+            if (r > 245 && g > 245 && b > 245) return 'rgb(0, 0, 0)';
+
+            return `rgb(${r}, ${g}, ${b})`;
+        }
+
+
+        // Desenha um traço (usada na pré-visualização e no PDF).
+        // - Largura = média da largura de todos os pontos (o 1.º ponto é só o início
+        //   afunilado da caneta e dava linhas demasiado finas).
+        // - Curvas suavizadas (o quadro guarda os traços como Bézier; com lineTo
+        //   a escrita pequena ficava "aos bicos").
+        function desenharTraco(ctx, child, board, scale) {
+            const points = child.sourcePointList || [];
+            if (points.length < 2) return;
+            const tr = child.transform || { m11: 1 };
+
+            let somaW = 0;
+            for (let i = 0; i < points.length; i++) somaW += (points[i].width || 4);
+            let larg = (somaW / points.length) * Math.abs(tr.m11) * scale;
+            larg = Math.max(larg, 0.8);
+
+            const X = p => (p.realX - board.minX + board.margem) * scale;
+            const Y = p => (p.realY - board.minY + board.margem) * scale;
+
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+
+            if (child.penType && child.penType !== 1) {
+                larg *= 3;
+                ctx.strokeStyle = 'white';
+            } else {
+                ctx.strokeStyle = getCssColor(child.color);
+            }
+            ctx.lineWidth = larg;
+
+            ctx.beginPath();
+            ctx.moveTo(X(points[0]), Y(points[0]));
+            if (points.length === 2) {
+                ctx.lineTo(X(points[1]), Y(points[1]));
+            } else {
+                for (let i = 1; i < points.length - 1; i++) {
+                    const mx = (X(points[i]) + X(points[i + 1])) / 2;
+                    const my = (Y(points[i]) + Y(points[i + 1])) / 2;
+                    ctx.quadraticCurveTo(X(points[i]), Y(points[i]), mx, my);
+                }
+                const last = points[points.length - 1];
+                ctx.lineTo(X(last), Y(last));
+            }
+            ctx.stroke();
+        }
+
+        window.boardsData = [];
+
+        // fn: função que devolve o texto (para poder ser re-traduzido) ou null para limpar
+        function mostrarMsg(fn) {
+            const m = document.getElementById('msg');
+            msgFn = fn || null;
+            const txt = fn ? fn() : '';
+            m.textContent = txt || '';
+            m.classList.toggle('on', !!txt);
+        }
+        function mostrarProgresso(fn) {
+            progFn = fn;
+            document.getElementById('progressTxt').textContent = fn();
+        }
+        function formatarTamanho(n) {
+            return n > 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB';
+        }
+
+        function carregar(file) {
+            if (!file) return;
+
+            document.getElementById('btnPdf').style.display = 'none';
+            document.getElementById('nameGroup').style.display = 'none';
+            document.getElementById('qualGroup').style.display = 'none';
+            document.getElementById('stats').classList.remove('on');
+            document.getElementById('progress').classList.remove('on');
+            progFn = null;
+            document.getElementById('pagesContainer').innerHTML = '';
+            document.getElementById('chipName').textContent = file.name;
+            document.getElementById('chipMeta').textContent = formatarTamanho(file.size);
+            document.getElementById('chip').classList.add('on');
+            mostrarMsg(() => t('processing'));
+
+            const suggestedName = file.name.replace(/\.[^/.]+$/, "");
+            document.getElementById('fileName').value = suggestedName;
+
+            lerFicheiroDoQuadro(file)
+                .then(data => setTimeout(() => calcularLimitesEPrevisualizar(data), 50))
+                .catch(err => {
+                    console.error(err);
+                    document.getElementById('chip').classList.remove('on');
+                    mostrarMsg(() => t('readErr', { detail: textoErro(err) }));
+                });
+        }
+
+        function removerFicheiro() {
+            window.boardsData = [];
+            document.getElementById('fileInput').value = '';
+            document.getElementById('chip').classList.remove('on');
+            document.getElementById('stats').classList.remove('on');
+            document.getElementById('progress').classList.remove('on');
+            progFn = null;
+            document.getElementById('btnPdf').style.display = 'none';
+            document.getElementById('nameGroup').style.display = 'none';
+            document.getElementById('qualGroup').style.display = 'none';
+            document.getElementById('pagesContainer').innerHTML = '';
+            mostrarMsg(null);
+        }
+        document.getElementById('chipX').addEventListener('click', removerFicheiro);
+
+        const dropEl = document.getElementById('drop');
+        document.getElementById('fileInput').addEventListener('change', e => { carregar(e.target.files[0]); });
+        ['dragenter', 'dragover'].forEach(ev => dropEl.addEventListener(ev, e => { e.preventDefault(); dropEl.classList.add('drag'); }));
+        ['dragleave', 'drop'].forEach(ev => dropEl.addEventListener(ev, e => { e.preventDefault(); dropEl.classList.remove('drag'); }));
+        dropEl.addEventListener('drop', e => carregar(e.dataTransfer.files[0]));
+
+
+        // ---------- Cortes de página / Page cuts ----------
+        const A4_RATIO = 297 / 210;
+        const GAP_MIN = 60; // distância mínima entre cortes (unidades do quadro)
+
+        // Procura zonas sem tinta perto do fim de cada página A4 para cortar aí.
+        function calcularCortesAutomaticos(bd) {
+            const passo = bd.vWidth * A4_RATIO;
+            const BIN = 4;
+            const n = Math.ceil(bd.vHeight / BIN) + 2;
+            const diff = new Int32Array(n + 2);
+            bd.childList.forEach(c => {
+                if (!isFinite(c.by0)) return;
+                const a = Math.max(0, Math.floor((c.by0 - bd.minY + bd.margem - 6) / BIN));
+                const b = Math.min(n - 1, Math.ceil((c.by1 - bd.minY + bd.margem + 6) / BIN));
+                diff[a]++; diff[b + 1]--;
+            });
+            const ocupado = new Uint8Array(n);
+            let acc = 0;
+            for (let i = 0; i < n; i++) { acc += diff[i]; ocupado[i] = acc > 0 ? 1 : 0; }
+
+            const cortes = [];
+            let inicio = 0;
+            while (inicio + passo < bd.vHeight - passo * 0.03) {
+                const alvo = inicio + passo;
+                const minimo = inicio + passo * 0.6;
+                let melhor = null;
+                let i = Math.min(n - 1, Math.floor(alvo / BIN));
+                while (i * BIN > minimo) {
+                    if (!ocupado[i]) {
+                        let j = i;
+                        while (j > 0 && !ocupado[j - 1] && (j - 1) * BIN > minimo) j--;
+                        melhor = ((i + j) / 2) * BIN + BIN / 2;
+                        break;
+                    }
+                    i--;
+                }
+                const corte = melhor !== null ? melhor : alvo;
+                cortes.push(corte);
+                inicio = corte;
+            }
+            return cortes;
+        }
+
+        function segmentosDe(bd) {
+            const ys = [0, ...bd.cuts, bd.vHeight];
+            return ys.slice(0, -1).map((y, i) => ({ y0: y, y1: ys[i + 1] }));
+        }
+
+        function atualizarStats() {
+            let paginas = 0;
+            window.boardsData.forEach(bd => { paginas += bd.cuts.length + 1; });
+            document.getElementById('stPaginas').textContent = paginas;
+        }
+
+        function renderCortes(bd) {
+            const layer = bd.layer;
+            layer.innerHTML = '';
+            segmentosDe(bd).forEach((sg, i) => {
+                const frac = Math.min(1, (bd.vWidth * A4_RATIO) / (sg.y1 - sg.y0));
+                const seg = document.createElement('div');
+                seg.className = 'seg' + (frac < 1 ? ' over' : '');
+                seg.style.top = (sg.y0 / bd.vHeight * 100) + '%';
+                seg.style.height = ((sg.y1 - sg.y0) / bd.vHeight * 100) + '%';
+                const tag = document.createElement('span');
+                tag.className = 'tag';
+                tag.textContent = t('page', { n: i + 1 }) + (frac < 1 ? t('tooLong', { pct: Math.round(frac * 100) }) : '');
+                seg.appendChild(tag);
+                layer.appendChild(seg);
+            });
+            bd.cuts.forEach((y, i) => {
+                const cut = document.createElement('div');
+                cut.className = 'cut';
+                cut.style.top = (y / bd.vHeight * 100) + '%';
+                cut.title = t('dragCut');
+                cut.innerHTML = '<span class="grip"></span>';
+                const x = document.createElement('button');
+                x.className = 'cutx'; x.type = 'button'; x.textContent = '\u2715'; x.title = t('removeCut');
+                x.addEventListener('pointerdown', e => e.stopPropagation());
+                x.addEventListener('click', e => {
+                    e.stopPropagation();
+                    bd.cuts.splice(i, 1);
+                    renderCortes(bd);
+                });
+                cut.appendChild(x);
+                cut.addEventListener('pointerdown', e => {
+                    if (e.target.closest('.cutx')) return;
+                    e.preventDefault(); e.stopPropagation();
+                    dragCorte = { bd: bd, i: i };
+                });
+                layer.appendChild(cut);
+            });
+            atualizarStats();
+        }
+
+        let dragCorte = null, acabouArrasto = false;
+        window.addEventListener('pointermove', e => {
+            if (!dragCorte) return;
+            const { bd, i } = dragCorte;
+            const r = bd.stage.getBoundingClientRect();
+            let y = (e.clientY - r.top) / r.height * bd.vHeight;
+            const lo = (i > 0 ? bd.cuts[i - 1] : 0) + GAP_MIN;
+            const hi = (i < bd.cuts.length - 1 ? bd.cuts[i + 1] : bd.vHeight) - GAP_MIN;
+            bd.cuts[i] = Math.max(lo, Math.min(hi, y));
+            acabouArrasto = true;
+            renderCortes(bd);
+        });
+        window.addEventListener('pointerup', () => {
+            if (dragCorte) { dragCorte = null; setTimeout(() => { acabouArrasto = false; }, 0); }
+        });
+
+        function criarPreview(bd, index) {
+            const container = document.getElementById('pagesContainer');
+            const div = document.createElement('div');
+            div.className = 'canvas-container';
+            div.innerHTML = `<h3 data-i18n="previewTitle" data-n="${index + 1}"></h3>
+                <div class="tools">
+                    <p class="hint" data-i18n="hint" data-html="1"></p>
+                    <button type="button" data-a="auto" data-i18n="autoCuts"></button>
+                    <button type="button" data-a="limpar" data-i18n="clearCuts"></button>
+                    <span class="sp"></span>
+                    <select data-a="zoom" data-i18n-title="zoomTitle">
+                        <option value="100" data-i18n="zoomFit"></option>
+                        <option value="150">150%</option>
+                        <option value="200">200%</option>
+                    </select>
+                </div>`;
+            const scrollBox = document.createElement('div');
+            scrollBox.className = 'scroll';
+            const stage = document.createElement('div');
+            stage.className = 'stage';
+
+            const canvas = document.createElement('canvas');
+            let prevScale = 1;
+            if (bd.vWidth > 2000) prevScale = 2000 / bd.vWidth;
+            canvas.width = Math.round(bd.vWidth * prevScale);
+            canvas.height = Math.round(bd.vHeight * prevScale);
+            const layer = document.createElement('div');
+            layer.className = 'layer';
+
+            stage.appendChild(canvas);
+            stage.appendChild(layer);
+            scrollBox.appendChild(stage);
+            div.appendChild(scrollBox);
+            container.appendChild(div);
+
+            bd.stage = stage; bd.layer = layer;
+
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = 'white';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            bd.childList.forEach(child => desenharTraco(ctx, child, bd, prevScale));
+
+            stage.addEventListener('click', e => {
+                if (acabouArrasto || e.target.closest('.cut')) return;
+                const r = stage.getBoundingClientRect();
+                const y = (e.clientY - r.top) / r.height * bd.vHeight;
+                if (y < GAP_MIN || y > bd.vHeight - GAP_MIN) return;
+                if (bd.cuts.some(c => Math.abs(c - y) < GAP_MIN)) return;
+                bd.cuts.push(y);
+                bd.cuts.sort((a, b) => a - b);
+                renderCortes(bd);
+            });
+            div.querySelector('[data-a="auto"]').addEventListener('click', () => { bd.cuts = calcularCortesAutomaticos(bd); renderCortes(bd); });
+            div.querySelector('[data-a="limpar"]').addEventListener('click', () => { bd.cuts = []; renderCortes(bd); });
+            div.querySelector('[data-a="zoom"]').addEventListener('change', e => { stage.style.width = e.target.value + '%'; });
+
+            renderCortes(bd);
+            aplicarIdioma();
+        }
+
+        function pareceQuadro(data) {
+            return data && (Array.isArray(data.whiteBoards) || Array.isArray(data.childList));
+        }
+
+        // Aceita .vwb / .zip (abre o zip e procura lá dentro o JSON do quadro)
+        // ou um .json solto.
+        async function lerFicheiroDoQuadro(file) {
+            const buf = await file.arrayBuffer();
+            const b = new Uint8Array(buf);
+
+            // Zip começa por "PK" (0x50 0x4B)
+            if (b[0] === 0x50 && b[1] === 0x4B) {
+                if (!window.JSZip) throw erroI18n('errJszip');
+                const zip = await JSZip.loadAsync(buf);
+                const entradas = Object.values(zip.files).filter(f => !f.dir);
+                // Primeiro os .json, depois os maiores
+                entradas.sort((x, y) => {
+                    const jx = /\.json$/i.test(x.name) ? 0 : 1;
+                    const jy = /\.json$/i.test(y.name) ? 0 : 1;
+                    if (jx !== jy) return jx - jy;
+                    return (y._data && y._data.uncompressedSize || 0) - (x._data && x._data.uncompressedSize || 0);
+                });
+                for (const ent of entradas) {
+                    try {
+                        const data = JSON.parse(await ent.async('string'));
+                        if (pareceQuadro(data)) return data;
+                    } catch (e) { /* não é JSON, passa ao seguinte */ }
+                }
+                throw erroI18n('errNoJson');
+            }
+
+            // Ficheiro de texto (JSON direto)
+            const data = JSON.parse(new TextDecoder('utf-8').decode(b).replace(/^\uFEFF/, ''));
+            if (!pareceQuadro(data)) throw erroI18n('errBadJson');
+            return data;
+        }
+
+        function calcularLimitesEPrevisualizar(data) {
+            const container = document.getElementById('pagesContainer');
+            container.innerHTML = '';
+            mostrarMsg(null);
+            window.boardsData = [];
+
+            const boards = data.whiteBoards || (data.childList ? [data] : []);
+            if (boards.length === 0) {
+                mostrarMsg(() => t('noDrawing'));
+                return;
+            }
+
+            let desenhouAlgumaCoisa = false;
+
+            boards.forEach((board, index) => {
+                const childList = board.childList || [];
+                if (childList.length === 0) return;
+
+                let minX = Infinity, minY = Infinity;
+                let maxX = -Infinity, maxY = -Infinity;
+
+                childList.forEach(child => {
+                    const tr = child.transform || { m11: 1, m12: 0, m13: 0, m21: 0, m22: 1, m23: 0 };
+
+                    child.bx0 = Infinity; child.by0 = Infinity; child.bx1 = -Infinity; child.by1 = -Infinity;
+                    (child.sourcePointList || []).forEach(pt => {
+                        if (pt.pointPos) {
+                            pt.realX = pt.pointPos.x * tr.m11 + pt.pointPos.y * tr.m12 + tr.m13;
+                            pt.realY = pt.pointPos.x * tr.m21 + pt.pointPos.y * tr.m22 + tr.m23;
+
+                            if (pt.realY < child.by0) child.by0 = pt.realY;
+                            if (pt.realY > child.by1) child.by1 = pt.realY;
+                            if (pt.realX < minX) minX = pt.realX;
+                            if (pt.realY < minY) minY = pt.realY;
+                            if (pt.realX > maxX) maxX = pt.realX;
+                            if (pt.realY > maxY) maxY = pt.realY;
+                        }
+                    });
+                });
+
+                if (minX === Infinity) return;
+                desenhouAlgumaCoisa = true;
+
+                const margem = 150;
+                const vWidth = (maxX - minX) + (margem * 2);
+                const vHeight = (maxY - minY) + (margem * 2);
+
+                const bd = {
+                    childList: childList,
+                    minX: minX, minY: minY,
+                    vWidth: vWidth, vHeight: vHeight,
+                    margem: margem
+                };
+                bd.cuts = calcularCortesAutomaticos(bd);
+                window.boardsData.push(bd);
+                criarPreview(bd, index);
+            });
+
+            if (desenhouAlgumaCoisa) {
+                document.getElementById('nameGroup').style.display = 'block';
+                document.getElementById('qualGroup').style.display = 'block';
+                document.getElementById('btnPdf').style.display = 'block';
+
+                let tracos = 0;
+                window.boardsData.forEach(bd => { tracos += bd.childList.length; });
+                document.getElementById('stTracos').textContent = tracos.toLocaleString(numLocale());
+                document.getElementById('stQuadros').textContent = window.boardsData.length;
+                atualizarStats();
+                document.getElementById('stats').classList.add('on');
+            } else {
+                mostrarMsg(() => t('noDrawing'));
+            }
+        }
+
+        const proximoFrame = () => new Promise(r => setTimeout(r, 0));
+
+        async function guardarCadernoPDF() {
+            if (!window.boardsData || window.boardsData.length === 0) return;
+
+            let fileName = document.getElementById('fileName').value.trim();
+            if (!fileName) fileName = t('defaultName');
+            if (!fileName.toLowerCase().endsWith('.pdf')) fileName += ".pdf";
+
+            const btn = document.getElementById('btnPdf');
+            const prog = document.getElementById('progress');
+            const fill = document.getElementById('barFill');
+
+            aGerar = true;
+            btn.textContent = t('generating');
+            btn.disabled = true;
+            mostrarMsg(null);
+            prog.classList.add('on');
+            fill.style.width = '0%';
+            mostrarProgresso(() => t('preparing'));
+            await proximoFrame();
+
+            try {
+                const { jsPDF } = window.jspdf;
+                const pdf = new jsPDF('p', 'mm', 'a4');
+                const pdfWidthMM = pdf.internal.pageSize.getWidth();
+                const pdfHeightMM = pdf.internal.pageSize.getHeight();
+
+                // Resolução escolhida (2480 = 300DPI, 4960 = 600DPI)
+                const renderW = parseInt(document.getElementById('qualidade').value) || 4960;
+                const renderH = Math.floor(renderW * (pdfHeightMM / pdfWidthMM));
+
+
+                const exportCanvas = document.createElement('canvas');
+                exportCanvas.width = renderW;
+                exportCanvas.height = renderH;
+                const ctx = exportCanvas.getContext('2d');
+
+                let totalGeral = 0;
+                window.boardsData.forEach(b => { totalGeral += b.cuts.length + 1; });
+
+                let feitas = 0;
+                let isFirstPage = true;
+
+                for (const board of window.boardsData) {
+                    for (const sg of segmentosDe(board)) {
+                        const altura = sg.y1 - sg.y0;
+                        // largura total da página; se a zona for demasiado alta, reduz para caber
+                        const scale = Math.min(renderW / board.vWidth, renderH / altura);
+                        const xOff = (renderW - board.vWidth * scale) / 2;
+
+                        ctx.fillStyle = 'white';
+                        ctx.fillRect(0, 0, renderW, renderH);
+
+                        ctx.save();
+                        ctx.beginPath();
+                        ctx.rect(0, 0, renderW, altura * scale);
+                        ctx.clip();
+                        ctx.translate(xOff, -sg.y0 * scale);
+
+                        board.childList.forEach(child => {
+                            // salta traços que não tocam nesta zona (muito mais rápido)
+                            const yMin = (child.by0 - board.minY + board.margem) - 40;
+                            const yMax = (child.by1 - board.minY + board.margem) + 40;
+                            if (yMax < sg.y0 || yMin > sg.y1) return;
+                            desenharTraco(ctx, child, board, scale);
+                        });
+                        ctx.restore();
+
+                        if (!isFirstPage) pdf.addPage();
+                        const imgData = exportCanvas.toDataURL('image/jpeg', 0.92);
+                        pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidthMM, pdfHeightMM, undefined, 'FAST');
+                        isFirstPage = false;
+
+                        feitas++;
+                        fill.style.width = Math.round(feitas / totalGeral * 100) + '%';
+                        const a = feitas;
+                        mostrarProgresso(() => t('pageOf', { a: a, b: totalGeral }));
+                        await proximoFrame(); // deixa o ecrã atualizar
+                    }
+                }
+
+                mostrarProgresso(() => t('saving'));
+                await proximoFrame();
+                pdf.save(fileName);
+                mostrarProgresso(() => t('done', { n: totalGeral }));
+
+            } catch (erro) {
+                console.error(erro);
+                prog.classList.remove('on');
+                progFn = null;
+                mostrarMsg(() => t('pdfError', { detail: textoErro(erro) }));
+            } finally {
+                aGerar = false;
+                btn.textContent = t('btnPdf');
+                btn.disabled = false;
+            }
+        }
+
+        aplicarIdioma();
+    </script>
+</body>
+</html>
