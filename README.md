@@ -32,13 +32,6 @@ Open the live page (GitHub Pages) or just open `index.html` in a browser, drop y
 
 Requires an internet connection on first load (jsPDF and JSZip are loaded from cdnjs).
 
-## Publish with GitHub Pages
-
-1. Create a repository and upload `index.html` and `README.md`.
-2. Go to **Settings → Pages**.
-3. Under **Build and deployment**, choose **Deploy from a branch**, select `main` and `/ (root)`, then save.
-4. After a minute the site is live at `https://<your-username>.github.io/<repository-name>/`.
-
 ## Libraries
 
 - [jsPDF](https://github.com/parallax/jsPDF) (MIT)
