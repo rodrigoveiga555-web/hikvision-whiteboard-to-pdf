@@ -1,9 +1,9 @@
 # Whiteboard to PDF / Quadro para PDF
 
-A single-page web tool that converts digital whiteboard files (`.vwb`, `.zip` or `.json`) into crisp A4 PDFs, page by page.
+A single-page web tool that converts digital whiteboard hikvision files (`.vwb`, `.zip` or `.json`) into crisp A4 PDFs, page by page.
 Everything runs in your browser — the file never leaves your computer.
 
-Uma ferramenta web de página única que converte ficheiros de quadro digital (`.vwb`, `.zip` ou `.json`) em PDF A4 nítido, página a página.
+Uma ferramenta web de página única que converte ficheiros do quadro digital hikvision (`.vwb`, `.zip` ou `.json`) em PDF A4 nítido, página a página.
 Tudo é processado no browser — o ficheiro não sai do teu computador.
 
 ## Features / Funcionalidades
