@@ -1,4 +1,4 @@
-# Whiteboard to PDF / Quadro para PDF
+# Hikvision Whiteboard to PDF / Hikvision Quadro para PDF
 
 A single-page web tool made to convert **Hikvision digital whiteboard** files (`.vwb`, `.zip` or `.json`) into crisp A4 PDFs, page by page.
 
